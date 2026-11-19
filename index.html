@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JBZ · Preparación de pedidos</title>
+<style>
+:root{--ink:#182230;--muted:#667085;--line:#d9e0e8;--blue:#185abc;--bg:#f4f6f9;--white:#fff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink)}
+header{background:#14243a;color:white;padding:22px max(18px,calc((100% - 1100px)/2))}
+header h1{margin:0;font-size:22px}header p{margin:5px 0 0;color:#d4deea}
+main{max-width:1100px;margin:22px auto;padding:0 16px 48px}.panel{background:white;border:1px solid var(--line);border-radius:13px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px #18223008}
+h2{font-size:17px;margin:0 0 13px}.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:150px}
+label{font-size:12px;color:var(--muted);font-weight:650}input,select,button{font:inherit;border-radius:8px;border:1px solid var(--line);padding:10px;background:white;color:var(--ink)}
+input[type=file]{max-width:100%}button{cursor:pointer;font-weight:650}button.primary{background:var(--blue);color:white;border-color:var(--blue)}button.soft{background:#edf3ff;color:#174ea6;border-color:#d6e4ff}button.danger{color:#b42318;background:#fff;border-color:#f1c5c1}
+.note{font-size:13px;color:var(--muted);margin:9px 0 0}.status{font-size:13px;color:#175c35;margin-top:9px}
+.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:680px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}td input{width:100%;min-width:75px;padding:8px}
+.summary{display:flex;gap:18px;flex-wrap:wrap;font-weight:700}.summary span{color:var(--muted);font-weight:500}
+.pallet{border:1px solid var(--line);padding:13px;border-radius:10px;margin-top:10px}.pallet h3{font-size:14px;margin:0 0 10px}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+@media(max-width:600px){header{padding:18px}.panel{padding:14px}.field{min-width:130px}}
+@media print{body{background:white}.no-print,header .sub{display:none!important}main{margin:0;max-width:none}.panel{box-shadow:none;break-inside:avoid}.panel:first-child{display:none}input{border:0;padding:0}button{display:none!important}table{min-width:0}th,td{font-size:10px;padding:5px}}
+</style>
+</head>
+<body>
+<header><h1>JBZ · Preparación y cierre de pedidos</h1><p class="sub">Carga el albarán, revisa las referencias y registra las cantidades preparadas.</p></header>
+<main>
+<section class="panel no-print">
+<h2>1. Cargar albarán PDF</h2>
+<div class="row"><div class="field"><label for="pdfFile">Seleccionar documento PDF</label><input id="pdfFile" type="file" accept="application/pdf"></div><button class="primary" id="readPdf">Leer albarán</button></div>
+<p class="note">La lectura automática extrae el texto digital del PDF. Si las cantidades están escritas a mano o el documento es un escaneo, tendrás que introducirlas o corregirlas manualmente. Comprueba siempre los datos antes de cerrar.</p>
+<div id="status" class="status" aria-live="polite"></div>
+</section>
+
+<section class="panel">
+<h2>2. Datos del pedido</h2>
+<div class="row">
+<div class="field"><label>N.º de albarán</label><input id="delivery" placeholder="Ej. 31004170"></div>
+<div class="field"><label>Cliente</label><input id="client" placeholder="Cliente"></div>
+<div class="field"><label>Fecha</label><input id="date" type="date"></div>
+</div>
+</section>
+
+<section class="panel">
+<h2>3. Referencias y cantidades</h2>
+<div class="tablewrap"><table id="itemsTable"><thead><tr><th>Referencia</th><th>Descripción</th><th>EAN</th><th>Solicitado</th><th>Preparado (manual)</th><th class="no-print">Acción</th></tr></thead><tbody id="itemsBody"><tr class="empty"><td colspan="6">Carga un albarán o añade una referencia manualmente.</td></tr></tbody></table></div>
+<div class="actions no-print"><button class="soft" id="addItem">+ Añadir referencia</button></div>
+<div class="summary" style="margin-top:14px"><div><span>Unidades solicitadas:</span> <b id="totalRequested">0</b></div><div><span>Unidades preparadas:</span> <b id="totalPicked">0</b></div><div><span>Diferencia:</span> <b id="difference">0</b></div></div>
+</section>
+
+<section class="panel">
+<h2>4. Bultos y pallets</h2>
+<p class="note">Las cajas las asigna el operario. Registra cada caja o pallet por separado; las medidas de un pallet nunca se mezclan con las de otro.</p>
+<div id="packages"></div>
+<div class="actions no-print"><button class="soft" id="addBox">+ Añadir caja</button><button class="soft" id="addPallet">+ Añadir pallet</button></div>
+</section>
+
+<section class="panel">
+<h2>5. Cierre del pedido</h2>
+<div class="row"><div class="field"><label>Observaciones / incidencias</label><input id="notes" placeholder="Indica errores, faltantes o incidencias"></div></div>
+<div class="actions no-print"><button class="primary" id="printBtn">Generar PDF / Imprimir</button><button id="csvBtn">Exportar referencias CSV</button></div>
+<p class="note">Para guardar el resultado como PDF, selecciona «Guardar como PDF» en el diálogo de impresión.</p>
+</section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const $=id=>document.getElementById(id);
+let items=[], packageCount=0;
+$('date').value=new Date().toISOString().slice(0,10);
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function renderItems(){
+ const body=$('itemsBody');
+ if(!items.length){body.innerHTML='<tr class="empty"><td colspan="6">No hay referencias. Añade una manualmente.</td></tr>';updateTotals();return;}
+ body.innerHTML=items.map((x,i)=>`<tr>
+ <td><input aria-label="Referencia" value="${esc(x.ref)}" data-i="${i}" data-k="ref"></td>
+ <td><input aria-label="Descripción" value="${esc(x.desc)}" data-i="${i}" data-k="desc"></td>
+ <td><input aria-label="EAN" value="${esc(x.ean)}" data-i="${i}" data-k="ean"></td>
+ <td><input aria-label="Solicitado" type="number" min="0" value="${Number(x.requested)||0}" data-i="${i}" data-k="requested"></td>
+ <td><input aria-label="Preparado" type="number" min="0" value="${Number(x.picked)||0}" data-i="${i}" data-k="picked"></td>
+ <td class="no-print"><button class="danger" data-remove="${i}">Eliminar</button></td></tr>`).join('');
+ body.querySelectorAll('input').forEach(el=>el.addEventListener('change',e=>{const i=+e.target.dataset.i,k=e.target.dataset.k;items[i][k]=['requested','picked'].includes(k)?Number(e.target.value):e.target.value;updateTotals();}));
+ body.querySelectorAll('[data-remove]').forEach(el=>el.addEventListener('click',()=>{items.splice(+el.dataset.remove,1);renderItems();}));
+ updateTotals();
+}
+function updateTotals(){let a=items.reduce((s,x)=>s+(Number(x.requested)||0),0),b=items.reduce((s,x)=>s+(Number(x.picked)||0),0);$('totalRequested').textContent=a;$('totalPicked').textContent=b;$('difference').textContent=b-a;}
+$('addItem').onclick=()=>{items.push({ref:'',desc:'',ean:'',requested:0,picked:0});renderItems();};
+function addPackage(type){
+ packageCount++;const id=packageCount, pallet=type==='Pallet';
+ const el=document.createElement('div');el.className='pallet';el.dataset.package=id;
+ el.innerHTML=`<h3>${type} ${id}</h3><div class="row">
+ <div class="field"><label>Identificador / caja</label><input placeholder="${pallet?'N.º de pallet':'N.º de caja'}"></div>
+ ${pallet?'<div class="field"><label>Largo (cm)</label><input type="number" min="0" step="0.1" placeholder="Largo"></div><div class="field"><label>Ancho (cm)</label><input type="number" min="0" step="0.1" placeholder="Ancho"></div><div class="field"><label>Alto (cm)</label><input type="number" min="0" step="0.1" placeholder="Alto"></div>':''}
+ <div class="field"><label>Peso (kg)</label><input type="number" min="0" step="0.1" placeholder="Peso"></div>
+ <div class="field"><label>Contenido / referencias</label><input placeholder="Referencias o notas"></div>
+ <div class="field no-print"><label>&nbsp;</label><button class="danger removePackage">Eliminar</button></div></div>`;
+ el.querySelector('.removePackage').onclick=()=>el.remove();$('packages').appendChild(el);
+}
+$('addBox').onclick=()=>addPackage('Caja');$('addPallet').onclick=()=>addPackage('Pallet');
+function parseText(text){
+ const lines=text.split(/\n/).map(s=>s.trim()).filter(Boolean);
+ const delivery=text.match(/N[º°o]\s*Albar[aá]n\s*([0-9]+)/i);if(delivery)$('delivery').value=delivery[1];
+ const client=text.match(/Empresa\s*\n\s*([^\n]+)/i);if(client)$('client').value=client[1].trim();
+ const date=text.match(/Fecha\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4})/i);if(date){const [d,m,y]=date[1].split('.');$('date').value=`${y}-${m}-${d}`;}
+ const found=[];
+ for(const line of lines){
+   const m=line.match(/^(\d{7})\s+(.+?)\s{2,}(\d{13})?\s*\S*\s+(\d{1,6})\s*UN$/i);
+   if(m)found.push({ref:m[1],desc:m[2].trim(),ean:m[3]||'',requested:Number(m[4]),picked:0});
+ }
+ if(found.length){items=found;renderItems();return found.length;}
+ return 0;
+}
+$('readPdf').onclick=async()=>{
+ const file=$('pdfFile').files[0];if(!file){$('status').textContent='Selecciona primero un archivo PDF.';return;}
+ $('status').textContent='Leyendo documento…';
+ try{const data=await file.arrayBuffer(),pdf=await pdfjsLib.getDocument({data}).promise;let text='';
+ for(let n=1;n<=pdf.numPages;n++){const page=await pdf.getPage(n),content=await page.getTextContent();text+=content.items.map(x=>x.str).join(' ')+'\n';}
+ const count=parseText(text);$('status').textContent=count?`Se han detectado ${count} referencias. Revisa y completa las cantidades preparadas.`:'No se detectaron referencias automáticamente. Puedes añadirlas manualmente.';
+ }catch(e){$('status').textContent='No se pudo leer el PDF. Comprueba que sea válido e inténtalo de nuevo.';console.error(e);}
+};
+$('printBtn').onclick=()=>window.print();
+$('csvBtn').onclick=()=>{
+ const rows=[['Referencia','Descripción','EAN','Solicitado','Preparado'],...items.map(x=>[x.ref,x.desc,x.ean,x.requested,x.picked])];
+ const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');
+ const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`JBZ_${$('delivery').value||'pedido'}.csv`;a.click();URL.revokeObjectURL(url);
+};
+</script>
+</body></html>
